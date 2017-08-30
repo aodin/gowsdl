@@ -4,8 +4,11 @@
 
 package gowsdl
 
+// import "encoding/xml"
+
 // WSDL represents the global structure of a WSDL file.
 type WSDL struct {
+	// XMLName         xml.Name        `xml:"definitions"`
 	Name            string          `xml:"name,attr"`
 	TargetNamespace string          `xml:"targetNamespace,attr"`
 	Imports         []*WSDLImport   `xml:"import"`

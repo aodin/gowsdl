@@ -54,7 +54,7 @@ import (
 	"log"
 	"os"
 
-	gen "github.com/hooklift/gowsdl"
+	gen "github.com/aodin/gowsdl"
 )
 
 // Version is initialized in compilation time by go build.
@@ -70,9 +70,7 @@ var insecure = flag.Bool("i", false, "Skips TLS Verification")
 var makePublic = flag.Bool("make-public", true, "Make the generated types public/exported")
 
 func init() {
-	log.SetFlags(0)
 	log.SetOutput(os.Stdout)
-	log.SetPrefix("🍀  ")
 }
 
 func main() {
@@ -135,6 +133,4 @@ func main() {
 	}
 
 	file.Write(source)
-
-	log.Println("Done 💩")
 }

@@ -214,30 +214,42 @@ func (g *GoWSDL) resolveXSDExternals(schema *XSDSchema, u *url.URL) error {
 			return err
 		}
 
-		newschema := new(XSDSchema)
+		schemas := []*XSDSchema{}
 
-		err = xml.Unmarshal(data, newschema)
-		if err != nil {
-			return err
-		}
-
-		if len(newschema.Includes) > 0 &&
-			maxRecursion > g.currentRecursionLevel {
-			g.currentRecursionLevel++
-
-			// log.Printf("Entering recursion %d\n", g.currentRecursionLevel)
-			err = g.resolveXSDExternals(newschema, u1)
+		// First attempt to parse the external schemas as a WSDL definition
+		externalWSDL := new(WSDL)
+		err = xml.Unmarshal(data, externalWSDL)
+		if err == nil {
+			schemas = append(schemas, externalWSDL.Types.Schemas...)
+		} else {
+			newschema := new(XSDSchema)
+			log.Println("Could not parse the external schema as WSDL, parsing as a schema...")
+			err = xml.Unmarshal(data, newschema)
 			if err != nil {
 				return err
 			}
+			schemas = append(schemas, newschema)
 		}
 
-		g.wsdl.Types.Schemas = append(g.wsdl.Types.Schemas, newschema)
+		for _, schema := range schemas {
+			if len(schema.Includes) > 0 &&
+				maxRecursion > g.currentRecursionLevel {
+				g.currentRecursionLevel++
 
-		if g.resolvedXSDExternals == nil {
-			g.resolvedXSDExternals = make(map[string]bool, maxRecursion)
+				// log.Printf("Entering recursion %d\n", g.currentRecursionLevel)
+				err = g.resolveXSDExternals(schema, u1)
+				if err != nil {
+					return err
+				}
+			}
+
+			g.wsdl.Types.Schemas = append(g.wsdl.Types.Schemas, schema)
+
+			if g.resolvedXSDExternals == nil {
+				g.resolvedXSDExternals = make(map[string]bool, maxRecursion)
+			}
+			g.resolvedXSDExternals[schemaName] = true
 		}
-		g.resolvedXSDExternals[schemaName] = true
 
 		return nil
 	}
@@ -267,6 +279,49 @@ func (g *GoWSDL) genTypes() ([]byte, error) {
 		"comment":              comment,
 		"removeNS":             removeNS,
 		"goString":             goString,
+	}
+
+	// Remove duplicates types from schemas
+	uniqueComplexNames := make(map[string]bool)
+	uniqueSimpleNames := make(map[string]bool)
+	uniqueElementNames := make(map[string]bool)
+
+	for i, schema := range g.wsdl.Types.Schemas {
+		uniqueComplex := []*XSDComplexType{}
+		uniqueSimple := []*XSDSimpleType{}
+		uniqueElement := []*XSDElement{}
+
+		for _, complexType := range schema.ComplexTypes {
+			if _, exists := uniqueComplexNames[complexType.Name]; !exists {
+				uniqueComplex = append(uniqueComplex, complexType)
+			} else {
+				log.Println("duplicate complex type:", complexType.Name)
+			}
+			uniqueComplexNames[complexType.Name] = true
+		}
+
+		for _, simpleType := range schema.SimpleType {
+			if _, exists := uniqueSimpleNames[simpleType.Name]; !exists {
+				uniqueSimple = append(uniqueSimple, simpleType)
+			} else {
+				log.Println("duplicate simple type:", simpleType.Name)
+			}
+			uniqueSimpleNames[simpleType.Name] = true
+		}
+
+		// Elements are separate from types?
+		for _, element := range schema.Elements {
+			if _, exists := uniqueElementNames[element.Name]; !exists {
+				uniqueElement = append(uniqueElement, element)
+			} else {
+				log.Println("duplicate element:", element.Name)
+			}
+			uniqueElementNames[element.Name] = true
+		}
+
+		g.wsdl.Types.Schemas[i].ComplexTypes = uniqueComplex
+		g.wsdl.Types.Schemas[i].SimpleType = uniqueSimple
+		g.wsdl.Types.Schemas[i].Elements = uniqueElement
 	}
 
 	//TODO resolve element refs in place.
